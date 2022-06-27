@@ -1,5 +1,5 @@
 * [首页](/)
 * [部署OceanBase-CE](部署OceanBase-CE)
-* [LEDE x86 koolshare Docker CE Portainer 部署 hass](LEDE x86 koolshare Docker CE Portainer 部署 hass)
-* [LEDE x86 Lean Docker CE Portainer 部署 hass hassio](LEDE x86 Lean Docker CE Portainer 部署 hass hassio)
-* [十代思域 百度 无线 CarLife 车机端 apk 本田 CRV](十代思域 百度 无线 CarLife 车机端 apk 本田 CRV)
+* [LEDE x86 koolshare Docker CE Portainer 部署 hass](koolshare-docker部署hass.md)
+* [LEDE x86 Lean Docker CE Portainer 部署 hass hassio](lean-docker部署hass.md)
+* [十代思域 百度 无线 CarLife 车机端 apk 本田 CRV](civic-carlife-apk)
