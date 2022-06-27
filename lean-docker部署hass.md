@@ -1,11 +1,11 @@
-LEDE x86 Lean Docker CE Portainer 部署 hass hassio homeassistant home-assistant
-# 成果
+# LEDE x86 Lean Docker CE Portainer 部署 hass hassio homeassistant home-assistant
+## 成果
 最终在Lean lede x86 上用docker跑起了hass。
 
-# 背景
+## 背景
 最开始尝试在Lean lede上用docker安装hass，碰到的问题是docker无法访问外网。于是转到koolshare，安装没有问题，但是重启之后没办法自动启动docker，再加上很多软件比如IPSEC出现配置环境失败，于是还是折腾Lean lede。既然不能访问外网，就从解决这个问题开始。
 
-# 步骤
+## 步骤
 - 自行编译Lean lede x86，或者下载别人编译好的，我这边使用的是efi引导的固件。
 - 使用win pe + 写盘工具，我用的是DiskImage，也可以使用纯命令行的physdiskwrite。
 - 重启之后修改管理员密码，ssh连入。
