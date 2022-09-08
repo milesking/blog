@@ -1,0 +1,315 @@
+## 用以保存 mysql 数据库密码的 Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: halo-mysql-secret
+data:
+  MYSQL_ROOT_PASSWORD: MTIzNDU2             # 必须是 base64 编码，在 Linux 可以通过 “echo -n "123456" | base64”命令获取
+type: Opaque
+
+---
+## 用以保存 halo 连接 mysql 数据库密码和 redis 缓存密码的 Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: halo-secret
+data:
+  SPRING_DATASOURCE_PASSWORD: MTIzNDU2      # 必须是 base64 编码，在 Linux 可以通过 “echo -n "123456" | base64”命令获取
+  SPRING_REDIS_PASSWORD: MTIzNDU2
+type: Opaque
+
+---
+## 用以保存 mysql 配置文件的 ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: halo-mysql-config
+data:
+  my.cnf: |-
+    [client]
+    default-character-set=utf8mb4
+    [mysql]
+    default-character-set=utf8mb4
+    [mysqld]
+    default_authentication_plugin=mysql_native_password
+    character-set-server=utf8mb4
+    collation-server=utf8mb4_general_ci
+    explicit_defaults_for_timestamp=true
+
+---
+## 用以保存 redis 配置文件的 ConfigMap，requirepass 的值为 redis 的连接密码
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: halo-redis-config
+data:
+  redis.conf: |-
+    port 6379
+    bind 0.0.0.0
+    appendonly yes
+    protected-mode no
+    requirepass 123456
+
+---
+## halo 需要的存储空间，用以持久化 /root/.halo 里的数据
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: halo-front-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: nfs-client               # storageClass 可根据您本地集群拥有的类型进行选择，这里采用的是 nfs-client
+
+---
+## 将 mysql 数据库以 StatefulSet 工作负载形式创建出来
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: halo-mysql
+  labels:
+    app: halo-mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: halo-mysql
+  template:
+    metadata:
+      labels:
+        app: halo-mysql
+    spec:
+      volumes:                                # 将前面创建的 ConfigMap 定义出来，方便后面调用
+        - name: halo-mysql-config
+          configMap:
+            name: halo-mysql-config
+            defaultMode: 420
+      containers:
+        - name: mysql
+          image: 'mysql:8.0.27'               # mysql 数据库的镜像版本，这里选择 mysql 8.0
+          ports:
+            - name: tcp-3306
+              containerPort: 3306             # 将容器的 3306 端口暴露出来
+              protocol: TCP
+          env:                                # 配置 mysql 数据库环境变量
+            - name: MYSQL_ROOT_PASSWORD       # 数据库 root 账户的密码，这里采用 Secret 方式初始化连接密码，下面填写最开始创建的名称为“halo-mysql-secret”的 Secret
+              valueFrom:
+                secretKeyRef:
+                  name: halo-mysql-secret
+                  key: MYSQL_ROOT_PASSWORD
+            - name: MYSQL_DATABASE            # 启动后创建一个名为 halodb 的库
+              value: halodb
+          volumeMounts:
+            - name: halo-mysql-pvc            # 将 mysql 数据库的 “/var/lib/mysql” 进行持久化，数据库落盘到名称为 “halo-mysql-pvc” 的持久化数据卷
+              mountPath: /var/lib/mysql
+            - name: halo-mysql-config         # 将 my.cnf 配置文件以 ConfigMap 的形式进行外部挂载
+              readOnly: true
+              mountPath: /etc/mysql/conf.d/my.cnf
+              subPath: my.cnf
+  serviceName: halo-mysql-service
+  volumeClaimTemplates:                       # 创建 mysql 数据库需要的持久化卷
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        name: halo-mysql-pvc
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+        storageClassName: nfs-client          # storageClass 可根据您本地集群拥有的类型进行选择，这里采用的是 nfs-client
+
+---
+## 为 mysql 工作负载创建 service
+apiVersion: v1
+kind: Service
+metadata:
+  name: halo-mysql-service
+spec:
+  ports:
+  - name: tcp-3306
+    protocol: TCP
+    port: 3306
+    targetPort: 3306
+  selector:
+    app: halo-mysql
+  clusterIP: None
+
+---
+## 将 redis 缓存以 StatefulSet 工作负载形式创建出来
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: halo-redis
+  labels:
+    app: halo-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: halo-redis
+  template:
+    metadata:
+      labels:
+        app: halo-redis
+    spec:
+      containers:
+        - name: halo-redis
+          image: 'redis:5.0.8'
+          ports:
+            - name: tcp-6379                       # 将容器的 6379 端口暴露出来
+              protocol: TCP
+              containerPort: 6379
+          livenessProbe:                           # 健康检查配置，添加探针以定时检查容器健康状态
+            initialDelaySeconds: 300
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+            tcpSocket:
+              port: 6379
+          readinessProbe:
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+            tcpSocket:
+              port: 6379
+          command:
+            - sh
+            - '-c'
+            - redis-server /usr/local/etc/redis/redis.conf
+          volumeMounts:
+            - readOnly: false
+              mountPath: /data                    # 将 redis 缓存的 “/data” 进行持久化，数据库落盘到名称为 “halo-redis-pvc” 的持久化数据卷
+              name: redis-pvc
+            - name: halo-redis-config             # 将 redis.conf 配置文件以 ConfigMap 的形式进行外部挂载
+              readOnly: true
+              mountPath: /usr/local/etc/redis/redis.conf
+              subPath: redis.conf
+      initContainers:                             # 初始化容器定义，使用启动脚本通过初始化容器对 redis 进行初始化操作
+        - name: system-init
+          image: 'busybox:1.32'
+          command:
+            - sh
+            - '-c'
+            - >-
+              echo 2048 > /proc/sys/net/core/somaxconn && echo never >
+              /sys/kernel/mm/transparent_hugepage/enabled
+          securityContext:                        # 启用容器安全上下文权限为特权模式，以主机上的 root 用户运行容器进程
+            privileged: true
+      volumes:                                    # 将前面创建的 ConfigMap 定义出来，方便后面调用
+        - name: halo-redis-config
+          configMap:
+            name: halo-redis-config
+  serviceName: halo-redis-service
+  volumeClaimTemplates:                           # 创建 redis 缓存需要的持久化卷
+    - spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: nfs-client              # storageClass 可根据您本地集群拥有的类型进行选择，这里采用的是 nfs-client
+      metadata:
+        name: redis-pvc
+
+---
+## 为 redis 工作负载创建 service
+apiVersion: v1
+kind: Service
+metadata:
+  name: halo-redis-service
+spec:
+  selector:
+    app: halo-redis
+  ports:
+    - name: tcp-6379
+      protocol: TCP
+      port: 6379
+      targetPort: 6379
+  clusterIP: None
+
+---
+## 将 halo 前端服务以 Deployment 工作负载的方式创建出来
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: halo-front
+  labels:
+    app: halo-front
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: halo-front
+  template:
+    metadata:
+      labels:
+        app: halo-front
+    spec:
+      volumes:                                # 将前面创建的 ConfigMap 定义出来，方便后面调用
+        - name: halo-front-pvc
+          persistentVolumeClaim:
+            claimName: halo-front-pvc
+      containers:
+        - name: halo
+          image: 'halohub/halo:1.5.2'         # halo 的镜像版本，后续修改这里的版本号可以实现 halo 的滚动升级
+          ports:
+            - name: http-8090
+              containerPort: 8090
+              protocol: TCP
+          env:                                # halo 的环境变量配置，可参考https://docs.halo.run/getting-started/install/other/docker-compose
+            - name: SERVER_PORT
+              value: '8090'
+            - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
+              value: com.mysql.cj.jdbc.Driver
+            - name: SPRING_DATASOURCE_URL     # 注意下面 3306 前面的 halo-mysql-service 为 mysql 数据库的 service 名称，如果前面 mysql 数据库的 service 做了修改，这里也要修改
+              value: jdbc:mysql://halo-mysql-service:3306/halodb?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+            - name: SPRING_DATASOURCE_USERNAME
+              value: root
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: halo-secret           # halo 连接数据库的密码，这里采用 Secret 方式初始化连接密码，下面填写最开始创建的名称为“halo-secret”的 Secret
+                  key: SPRING_DATASOURCE_PASSWORD
+            - name: HALO_ADMIN_PATH
+              value: admin
+            - name: HALO_CACHE
+              value: redis
+            - name: SPRING_REDIS_PORT
+              value: '6379'
+            - name: SPRING_REDIS_DATABASE
+              value: '0'
+            - name: SPRING_REDIS_HOST
+              value: halo-redis-service
+            - name: SPRING_REDIS_PASSWORD     # halo 连接缓存的密码，这里采用 Secret 方式初始化连接密码，下面填写最开始创建的名称为“halo-secret”的 Secret
+              valueFrom:
+                secretKeyRef:
+                  name: halo-secret
+                  key: SPRING_REDIS_PASSWORD
+          volumeMounts:                       # 将 halo 的 “/root/.halo” 进行持久化，数据库落盘到名称为 “halo-front-pvc” 的持久化数据卷
+            - name: halo-front-pvc
+              mountPath: /root/.halo
+
+---
+## 为 halo 工作负载创建 service，并通过 nodePort 的方式暴露出来
+apiVersion: v1
+kind: Service
+metadata:
+  name: halo-front-service
+spec:
+  type: NodePort
+  ports:
+  - name: tcp-8090
+    protocol: TCP
+    port: 8090
+    targetPort: 8090
+    nodePort: 30890
+  selector:
+    app: halo-front
