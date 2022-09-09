@@ -103,25 +103,13 @@ spec:
             - name: MYSQL_DATABASE            # 启动后创建一个名为 halodb 的库
               value: halodb
           volumeMounts:
-            - name: halo-mysql-pvc            # 将 mysql 数据库的 “/var/lib/mysql” 进行持久化，数据库落盘到名称为 “halo-mysql-pvc” 的持久化数据卷
+            - name: halo-front-pvc            # 将 mysql 数据库的 “/var/lib/mysql” 进行持久化，数据库落盘到名称为 “halo-mysql-pvc” 的持久化数据卷
               mountPath: /var/lib/mysql
             - name: halo-mysql-config         # 将 my.cnf 配置文件以 ConfigMap 的形式进行外部挂载
               readOnly: true
               mountPath: /etc/mysql/conf.d/my.cnf
               subPath: my.cnf
   serviceName: halo-mysql-service
-  volumeClaimTemplates:                       # 创建 mysql 数据库需要的持久化卷
-    - kind: PersistentVolumeClaim
-      apiVersion: v1
-      metadata:
-        name: halo-mysql-pvc
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: 5Gi
-        storageClassName: local-storage # 与下面的SC对应
 
 ---
 ## 为 mysql 工作负载创建 service
