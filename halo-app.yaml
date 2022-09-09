@@ -63,8 +63,6 @@ spec:
     requests:
       storage: 10Gi
   storageClassName: local-storage # 与下面的SC对应
-  local:
-    path: /root/data
 
 ---
 ## 将 mysql 数据库以 StatefulSet 工作负载形式创建出来
@@ -124,8 +122,6 @@ spec:
           requests:
             storage: 5Gi
         storageClassName: local-storage # 与下面的SC对应
-        local:
-          path: /root/data
 
 ---
 ## 为 mysql 工作负载创建 service
