@@ -82,9 +82,6 @@ spec:
       labels:
         app: halo-mysql
     spec:
-      tolerations:
-        - key: node-role.kubernetes.io/master
-          effect: NoSchedule
       volumes:                                # 将前面创建的 ConfigMap 定义出来，方便后面调用
         - name: halo-mysql-config
           configMap:
@@ -160,9 +157,6 @@ spec:
       labels:
         app: halo-redis
     spec:
-      tolerations:
-        - key: node-role.kubernetes.io/master
-          effect: NoSchedule
       containers:
         - name: halo-redis
           image: 'redis:5.0.8'
@@ -259,9 +253,6 @@ spec:
       labels:
         app: halo-front
     spec:
-      tolerations:
-        - key: node-role.kubernetes.io/master
-          effect: NoSchedule
       volumes:                                # 将前面创建的 ConfigMap 定义出来，方便后面调用
         - name: halo-front-pvc
           persistentVolumeClaim:
