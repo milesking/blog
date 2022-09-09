@@ -62,7 +62,9 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  storageClassName: nfs-client               # storageClass 可根据您本地集群拥有的类型进行选择，这里采用的是 nfs-client
+  storageClassName: local-storage # 与下面的SC对应
+  local:
+    path: /root/data
 
 ---
 ## 将 mysql 数据库以 StatefulSet 工作负载形式创建出来
@@ -121,7 +123,9 @@ spec:
         resources:
           requests:
             storage: 5Gi
-        storageClassName: nfs-client          # storageClass 可根据您本地集群拥有的类型进行选择，这里采用的是 nfs-client
+        storageClassName: local-storage # 与下面的SC对应
+        local:
+          path: /root/data
 
 ---
 ## 为 mysql 工作负载创建 service
@@ -215,7 +219,9 @@ spec:
         resources:
           requests:
             storage: 10Gi
-        storageClassName: nfs-client              # storageClass 可根据您本地集群拥有的类型进行选择，这里采用的是 nfs-client
+        storageClassName: local-storage # 与下面的SC对应
+        local:
+          path: /root/data
       metadata:
         name: redis-pvc
 
